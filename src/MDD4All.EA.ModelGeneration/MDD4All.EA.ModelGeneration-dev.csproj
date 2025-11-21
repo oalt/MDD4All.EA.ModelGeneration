@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <RootNamespace>$(MSBuildProjectName.Replace("-dev", ""))</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName.Replace("-dev", ""))</AssemblyName>
+        <SignAssembly>True</SignAssembly>
+        <AssemblyOriginatorKeyFile>MDD4All_Github.snk</AssemblyOriginatorKeyFile>
+        <Nullable>enable</Nullable>
+        <LangVersion>10</LangVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="NJsonSchema" Version="11.5.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\MDD4All.EMOF.DataModels\src\MDD4All.EMOF.DataModels\MDD4All.EMOF.DataModels-dev.csproj" />
+        <ProjectReference Include="..\..\..\MDD4All.EnterpriseArchitect.Manipulations\src\MDD4All.EA.Manipulations\MDD4All.EnterpriseArchitect.Manipulations-dev.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="Interop.EA">
+            <HintPath>..\..\..\libs\Interop.EA.dll</HintPath>
+            <EmbedInteropTypes>False</EmbedInteropTypes>
+        </Reference>
+    </ItemGroup>
+
+</Project>
