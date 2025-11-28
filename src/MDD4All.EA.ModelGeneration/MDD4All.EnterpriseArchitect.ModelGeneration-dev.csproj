@@ -11,10 +11,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="NJsonSchema" Version="11.5.1" />
-    </ItemGroup>
-
-    <ItemGroup>
         <ProjectReference Include="..\..\..\MDD4All.EMOF.DataModels\src\MDD4All.EMOF.DataModels\MDD4All.EMOF.DataModels-dev.csproj" />
         <ProjectReference Include="..\..\..\MDD4All.EnterpriseArchitect.Manipulations\src\MDD4All.EA.Manipulations\MDD4All.EnterpriseArchitect.Manipulations-dev.csproj" />
     </ItemGroup>

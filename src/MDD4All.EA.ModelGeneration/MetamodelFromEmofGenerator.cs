@@ -1,12 +1,11 @@
 ﻿using MDD4All.EnterpriseArchitect.Manipulations;
 using Newtonsoft.Json;
-using NJsonSchema;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MOF = MDD4All.EMOF.DataModels;
 
-namespace MDD4All.EA.ModelGeneration
+namespace MDD4All.EnterpriseArchitect.ModelGeneration
 {
     public class MetamodelFromEmofGenerator
     {
