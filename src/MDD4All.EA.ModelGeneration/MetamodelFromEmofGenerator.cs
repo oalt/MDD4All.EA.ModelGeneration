@@ -1,4 +1,5 @@
-﻿using MDD4All.EnterpriseArchitect.Manipulations;
+﻿using MDD4All.EMOF.DotNetToEmofConverter;
+using MDD4All.EnterpriseArchitect.Manipulations;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.IO;
@@ -19,6 +20,9 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
         private Dictionary<string, EA.Element> _generatedElements = new Dictionary<string, EA.Element>();
 
+        private List<AnnotationDescriptor> _unconnectedPrimitiveAnnotations = new List<AnnotationDescriptor>();
+
+
         public MetamodelFromEmofGenerator(EA.Repository repository,
                                           string pathToShema,
                                           EA.Package targetPackage)
@@ -32,6 +36,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
         {
 
             _generatedElements = new Dictionary<string, EA.Element>();
+            _unconnectedPrimitiveAnnotations = new List<AnnotationDescriptor>();
 
             string emofJson = File.ReadAllText(_pathToSchema);
 
@@ -54,6 +59,8 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                     GenerateConnectorsRecursively(package);
                 }
 
+                GenerateAnnotationsForPrimitiveTypes();
+
                 _repository.GetProjectInterface().LayoutDiagram(metamodelDiagram.DiagramGUID, 0);
 
                 _targetPackage.Element.Update();
@@ -62,7 +69,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
 
 
-        private void GeneratePackagesAndElementsRecursively(MOF.Package currentPackage, 
+        private void GeneratePackagesAndElementsRecursively(MOF.Package currentPackage,
                                                             EA.Package parentPackage)
         {
             EA.Package childPackage = parentPackage.GetChildPackageByName(currentPackage.Name);
@@ -72,7 +79,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                 childPackage = parentPackage.AddChildPackage(currentPackage.Name);
             }
 
-            foreach(MOF.Base.PackageableElement packageableElement in currentPackage.PackagedElements)
+            foreach (MOF.Base.PackageableElement packageableElement in currentPackage.PackagedElements)
             {
                 if (packageableElement is MOF.Class)
                 {
@@ -85,55 +92,19 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                         classElement.Update();
                     }
 
-                    // add primitive properties
-                    foreach (MOF.Property property in mofClass.OwnedAttributes)
-                    {
-                        if (IsPrimitive(property.TypeRef))
-                        {
-                            string? primitiveTypeAlias = GetPrimitiveTypeAlias(property.TypeRef);
-
-                            if (primitiveTypeAlias == null)
-                            {
-                                primitiveTypeAlias = "";
-                            }
-
-                            EA.Attribute attribute = classElement.AddAttribute(property.Name, primitiveTypeAlias);
-
-                            attribute.Stereotype = "property";
-                            attribute.Update();
-                        }
-                        
-                    }
+                    AddPrimitiveProperties(mofClass.OwnedAttributes, classElement);
 
                     if (!_generatedElements.ContainsKey(mofClass.FullName))
                     {
                         _generatedElements.Add(mofClass.FullName, classElement);
                     }
                 }
-                else if(packageableElement is MOF.Interface)
+                else if (packageableElement is MOF.Interface)
                 {
                     MOF.Interface mofInterface = (MOF.Interface)packageableElement;
                     EA.Element classElement = childPackage.AddElement(mofInterface.Name, "Interface");
 
-                    // add primitive properties
-                    foreach (MOF.Property property in mofInterface.OwnedAttributes)
-                    {
-                        if (IsPrimitive(property.TypeRef))
-                        {
-                            string? primitiveTypeAlias = GetPrimitiveTypeAlias(property.TypeRef);
-
-                            if (primitiveTypeAlias == null)
-                            {
-                                primitiveTypeAlias = "";
-                            }
-
-                            EA.Attribute attribute = classElement.AddAttribute(property.Name, primitiveTypeAlias);
-
-                            attribute.Stereotype = "property";
-                            attribute.Update();
-                        }
-
-                    }
+                    AddPrimitiveProperties(mofInterface.OwnedAttributes, classElement);
 
                     if (!_generatedElements.ContainsKey(mofInterface.FullName))
                     {
@@ -159,12 +130,48 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                 }
             }
 
-            foreach(MOF.Package subPackage in currentPackage.NestedPackages)
+            foreach (MOF.Package subPackage in currentPackage.NestedPackages)
             {
                 GeneratePackagesAndElementsRecursively(subPackage, childPackage);
             }
         }
 
+        private void AddPrimitiveProperties(List<MOF.Property> properties, EA.Element element)
+        {
+            // add primitive properties
+            foreach (MOF.Property property in properties)
+            {
+                if (IsPrimitive(property.TypeRef))
+                {
+                    string? primitiveTypeAlias = GetPrimitiveTypeAlias(property.TypeRef);
+
+                    if (primitiveTypeAlias == null)
+                    {
+                        primitiveTypeAlias = "";
+                    }
+
+                    EA.Attribute attribute = element.AddAttribute(property.Name, primitiveTypeAlias);
+
+                    attribute.Stereotype = "property";
+                    attribute.Update();
+
+                    if (property.Annotations != null && property.Annotations.Count > 0)
+                    {
+                        foreach (MOF.InstanceSpecification annotation in property.Annotations)
+                        {
+                            AnnotationDescriptor annotationDescriptor = new AnnotationDescriptor
+                            {
+                                Property = property,
+                                Element = element,
+                                Attribute = attribute
+                            };
+                            _unconnectedPrimitiveAnnotations.Add(annotationDescriptor);
+                        }
+                    }
+                }
+
+            }
+        }
 
         private void GenerateConnectorsRecursively(MOF.Package currentPackage)
         {
@@ -195,7 +202,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                                     {
                                         EA.Connector generalizationConnector = currentEaElement.AddConnector(superClassElement, "Generalization");
                                     }
-                                    else if(superClassElement.Type == "Interface")
+                                    else if (superClassElement.Type == "Interface")
                                     {
                                         EA.Connector realizationConnector = currentEaElement.AddConnector(superClassElement, "Realization");
                                     }
@@ -204,7 +211,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                         }
                     }
                 }
-                else if(packageableElement is MOF.Interface)
+                else if (packageableElement is MOF.Interface)
                 {
                     MOF.Interface mofInterface = (MOF.Interface)packageableElement;
 
@@ -225,7 +232,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                                 {
                                     EA.Element superClassElement = _generatedElements[superClassRef];
 
-                                    EA.Connector generalizationConnector = currentEaElement.AddConnector(superClassElement, "Generalization");                                    
+                                    EA.Connector generalizationConnector = currentEaElement.AddConnector(superClassElement, "Generalization");
                                 }
                             }
                         }
@@ -265,6 +272,8 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                     }
 
                     aggregationConnector.Update();
+
+                    GenerateAnnotaionsForComplexType(property, aggregationConnector);
                 }
             }
             else if (isEnumeration)
@@ -284,6 +293,78 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
             }
         }
 
+        private void GenerateAnnotationsForPrimitiveTypes()
+        {
+            foreach (AnnotationDescriptor annotationDescriptor in _unconnectedPrimitiveAnnotations)
+            {
+                foreach (MOF.InstanceSpecification annotation in annotationDescriptor.Property.Annotations!)
+                {
+                    EA.Element? annotationObject = CreateAnnotationObject(annotation, annotationDescriptor.Attribute.Name, annotationDescriptor.Element);
+
+                    annotationDescriptor.Attribute.AddConnector(_repository, annotationObject, "Association");
+                }
+            }
+        }
+
+        private void GenerateAnnotaionsForComplexType(MOF.Property property, EA.Connector aggregationConnector)
+        {
+            if (property.Annotations != null && property.Annotations.Count > 0)
+            {
+                EA.Element sourceEaElement = _repository.GetElementByID(aggregationConnector.ClientID);
+                EA.Element targetEaElement = _repository.GetElementByID(aggregationConnector.SupplierID);
+
+                EA.Package eaPackage = _repository.GetPackageByID(sourceEaElement.PackageID);
+
+                foreach (MOF.InstanceSpecification annotation in property.Annotations)
+                {
+                    EA.Element? annotationObject = CreateAnnotationObject(annotation, aggregationConnector.ClientEnd.Role, targetEaElement);
+
+                    if (annotationObject != null)
+                    {
+                        // generate connector
+                        // 1. generate a proxy connector element
+                        EA.Element proxyConnectorElement = eaPackage.AddElement("ProxyConnector", "ProxyConnector");
+
+                        _repository.Execute("UPDATE t_object SET Classifier_guid='" + aggregationConnector.ConnectorGUID + "' WHERE Object_ID=" + proxyConnectorElement.ElementID + ";");
+
+                        // 2. add the connector
+                        EA.Connector annotationConnector = annotationObject.AddConnector(proxyConnectorElement, "Association");
+
+                    }
+                }
+            }
+        }
+
+        private EA.Element? CreateAnnotationObject(MOF.InstanceSpecification annotation,
+                                                   string annotationName,
+                                                   EA.Element eaElement)
+        {
+            EA.Element? result = null;
+
+            if (annotation.ClassifierRef != null && _generatedElements.ContainsKey(annotation.ClassifierRef))
+            {
+                EA.Element annotationClassifierElement = _generatedElements[annotation.ClassifierRef];
+
+                // generate annotation object
+                EA.Element annotationObject = eaElement.AddEmbeddedElement(_repository, annotationName, "Object");
+                annotationObject.Stereotype = "annotation";
+                annotationObject.ClassifierID = annotationClassifierElement.ElementID;
+                annotationObject.Update();
+
+                if (annotation.Slots != null)
+                {
+                    foreach (MOF.Slot slot in annotation.Slots)
+                    {
+                        annotationObject.SetRunStateValue(slot.DefiningFeatureRef, slot.Value, "=");
+                    }
+                }
+
+                result = annotationObject;
+            }
+
+            return result;
+        }
+
         private HashSet<string> _primitiveTypes = new HashSet<string>
         {
             "System.Int32",
@@ -296,7 +377,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
         {
             bool result = false;
 
-            if(_primitiveTypes.Contains(fullName))
+            if (_primitiveTypes.Contains(fullName))
             {
                 result = true;
             }
@@ -309,7 +390,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
             bool result = false;
             MOF.Base.PackageableElement? packageableElement = FindByFullName(fullName);
 
-            if(packageableElement != null && packageableElement is MOF.Enumeration)
+            if (packageableElement != null && packageableElement is MOF.Enumeration)
             {
                 result = true;
             }
@@ -337,17 +418,17 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
         private void FindPackagableElementRecursively(MOF.Package currentPackage, string fullName, ref MOF.Base.PackageableElement? result)
         {
-            foreach(MOF.Base.PackageableElement packageableElement in currentPackage.PackagedElements)
+            foreach (MOF.Base.PackageableElement packageableElement in currentPackage.PackagedElements)
             {
-                if(packageableElement.FullName == fullName)
+                if (packageableElement.FullName == fullName)
                 {
                     result = packageableElement;
                     break;
                 }
             }
-            if(result == null)
+            if (result == null)
             {
-                foreach(MOF.Package childPackage in currentPackage.NestedPackages)
+                foreach (MOF.Package childPackage in currentPackage.NestedPackages)
                 {
                     FindPackagableElementRecursively(childPackage, fullName, ref result);
                 }
@@ -358,7 +439,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
         {
             string? result = null;
 
-            switch(fullName)
+            switch (fullName)
             {
                 case "System.Boolean":
                     result = "bool";
@@ -388,7 +469,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
             return result;
         }
 
-       
+
 
         private EA.Package GetOrCreateNamespacePackage(string fullName)
         {
