@@ -321,15 +321,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
                     if (annotationObject != null)
                     {
-                        // generate connector
-                        // 1. generate a proxy connector element
-                        EA.Element proxyConnectorElement = eaPackage.AddElement("ProxyConnector", "ProxyConnector");
-
-                        _repository.Execute("UPDATE t_object SET Classifier_guid='" + aggregationConnector.ConnectorGUID + "' WHERE Object_ID=" + proxyConnectorElement.ElementID + ";");
-
-                        // 2. add the connector
-                        EA.Connector annotationConnector = annotationObject.AddConnector(proxyConnectorElement, "Association");
-
+                        aggregationConnector.AddConnector(_repository, annotationObject, "Association");
                     }
                 }
             }
