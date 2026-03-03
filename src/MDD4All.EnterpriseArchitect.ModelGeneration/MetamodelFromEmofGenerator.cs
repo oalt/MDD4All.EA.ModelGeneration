@@ -224,9 +224,9 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                             GenerateCompositionConnectors(currentEaElement, property);
                         }
 
-                        if (mofInterface.RedefinedInterfacesRef != null)
+                        if (mofInterface.RedefinedInterfacesRefs != null)
                         {
-                            foreach (string superClassRef in mofInterface.RedefinedInterfacesRef)
+                            foreach (string superClassRef in mofInterface.RedefinedInterfacesRefs)
                             {
                                 if (_generatedElements.ContainsKey(superClassRef))
                                 {
@@ -235,6 +235,50 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                                     EA.Connector generalizationConnector = currentEaElement.AddConnector(superClassElement, "Generalization");
                                 }
                             }
+                        }
+                    }
+                }
+                else if (packageableElement is MOF.Association)
+                {
+                    MOF.Association association = (MOF.Association)packageableElement;
+
+                    if (association.OwnedEnds.Count == 2)
+                    {
+                        MOF.Property sourceProperty = association.OwnedEnds[0];
+                        MOF.Property targetProperty = association.OwnedEnds[1];
+
+                        if (sourceProperty != null && targetProperty != null)
+                        {
+                            EA.Element? sourceEaElement = null;
+                            EA.Element? targetEaElement = null;
+
+                            if(_generatedElements.ContainsKey(sourceProperty.TypeRef))
+                            {
+                                sourceEaElement = _generatedElements[sourceProperty.TypeRef];
+                            }
+
+                            if (_generatedElements.ContainsKey(targetProperty.TypeRef))
+                            {
+                                targetEaElement = _generatedElements[targetProperty.TypeRef];
+                            }
+
+                            if (sourceEaElement != null && targetEaElement != null)
+                            {
+                                EA.Connector associationConnector = sourceEaElement.AddConnector(targetEaElement, "Association");
+
+                                associationConnector.ClientEnd.Cardinality = sourceProperty.Multiplicity;
+                                associationConnector.ClientEnd.Navigable = "Navigable";
+                                associationConnector.ClientEnd.Update();
+
+                                associationConnector.SupplierEnd.Cardinality = targetProperty.Multiplicity;
+                                associationConnector.SupplierEnd.Role = targetProperty.Name;
+                                associationConnector.SupplierEnd.Update();
+
+                                associationConnector.Update();
+
+
+                            }
+
                         }
                     }
                 }
