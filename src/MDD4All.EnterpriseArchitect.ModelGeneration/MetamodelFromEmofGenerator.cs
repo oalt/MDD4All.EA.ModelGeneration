@@ -275,7 +275,10 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                         attribute = element.AddAttribute(property.Name, primitiveTypeAlias);
                     }
 
-                    attribute.Stereotype = "property";
+                    if (property.Kind == MOF.Enumerations.PropertyKind.Property)
+                    {
+                        attribute.Stereotype = "property";
+                    }
 
                     if (property.IsReadOnly)
                     {
@@ -469,6 +472,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                     if (property.CollectionTypeRef != null)
                     {
                         aggregationConnector.SetTaggedValueString("CollectionTypeRef", property.CollectionTypeRef);
+                        aggregationConnector.SetTaggedValueString("MemberKind", property.Kind.ToString());
                     }
 
                     aggregationConnector.Update();
