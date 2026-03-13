@@ -37,8 +37,6 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
         public void ConvertEmofToMetamodel()
         {
-
-            _generatedElements = new Dictionary<MOF.Base.TypeReference, EA.Element>();
             _elementsToConnect = new Dictionary<MOF.Base.TypeReference, EA.Element>();
             _unconnectedPrimitiveAnnotations = new List<AnnotationDescriptor>();
 
@@ -171,7 +169,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                             {
                                 ;
                             }
-                            }
+                        }
                         else
                         {
                             classElement = existingElement;
@@ -192,11 +190,6 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                             FullName = mofClass.FullName,
                             Version = mofClass.Version
                         };
-
-                        if (!_generatedElements.ContainsKey(typeReference))
-                        {
-                            _generatedElements.Add(typeReference, classElement);
-                        }
 
                     }
                     else if (packageableElement is MOF.Interface)
@@ -231,10 +224,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                             Version = mofInterface.Version
                         };
 
-                        if (!_generatedElements.ContainsKey(typeReference))
-                        {
-                            _generatedElements.Add(typeReference, classElement);
-                        }
+
                     }
                     else if (packageableElement is MOF.Enumeration)
                     {
@@ -268,10 +258,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                             Version = mofEnumeration.Version
                         };
 
-                        if (!_generatedElements.ContainsKey(typeReference))
-                        {
-                            _generatedElements.Add(typeReference, enumerationElement);
-                        }
+
                     }
                 }
             }
@@ -408,30 +395,35 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
                     if (_elementsToConnect.ContainsKey(typeReference))
                     {
-                        EA.Element currentEaElement = _generatedElements[typeReference];
+                        EA.Element? currentEaElement = GetElementByFullNameAndVersion(typeReference.FullName, typeReference.Version!);
 
-                        foreach (MOF.Property property in mofClass.OwnedAttributes)
+                        if (currentEaElement != null)
                         {
-                            GenerateCompositionConnectors(currentEaElement, property);
-                        }
-
-                        if (mofClass.SuperClassRefs != null)
-                        {
-                            foreach (MOF.Base.TypeReference superClassRef in mofClass.SuperClassRefs)
+                            foreach (MOF.Property property in mofClass.OwnedAttributes)
                             {
-                                if (_generatedElements.ContainsKey(superClassRef))
-                                {
-                                    EA.Element superClassElement = _generatedElements[superClassRef];
+                                GenerateCompositionConnectors(currentEaElement, property);
+                            }
 
-                                    if (superClassElement.Type == "Class")
+                            if (mofClass.SuperClassRefs != null)
+                            {
+                                foreach (MOF.Base.TypeReference superClassRef in mofClass.SuperClassRefs)
+                                {
+                                    EA.Element? superClassElement = GetElementByFullNameAndVersion(superClassRef.FullName, superClassRef.Version!);
+
+                                    if (superClassElement != null)
                                     {
-                                        EA.Connector generalizationConnector = currentEaElement.AddConnector(superClassElement, "Generalization");
-                                    }
-                                    else if (superClassElement.Type == "Interface")
-                                    {
-                                        EA.Connector realizationConnector = currentEaElement.AddConnector(superClassElement, "Realization");
+
+                                        if (superClassElement.Type == "Class")
+                                        {
+                                            EA.Connector generalizationConnector = currentEaElement.AddConnector(superClassElement, "Generalization");
+                                        }
+                                        else if (superClassElement.Type == "Interface")
+                                        {
+                                            EA.Connector realizationConnector = currentEaElement.AddConnector(superClassElement, "Realization");
+                                        }
                                     }
                                 }
+
                             }
                         }
                     }
@@ -448,21 +440,23 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
                     if (_elementsToConnect.ContainsKey(interfaceReference))
                     {
-                        EA.Element currentEaElement = _generatedElements[interfaceReference];
+                        EA.Element? currentEaElement = GetElementByFullNameAndVersion(interfaceReference.FullName, interfaceReference.Version!);
 
-                        foreach (MOF.Property property in mofInterface.OwnedAttributes)
+                        if (currentEaElement != null)
                         {
-                            GenerateCompositionConnectors(currentEaElement, property);
+                            foreach (MOF.Property property in mofInterface.OwnedAttributes)
+                            {
+                                GenerateCompositionConnectors(currentEaElement, property);
+                            }
                         }
-
                         if (mofInterface.RedefinedInterfacesRefs != null)
                         {
                             foreach (MOF.Base.TypeReference superClassRef in mofInterface.RedefinedInterfacesRefs)
                             {
-                                if (_generatedElements.ContainsKey(superClassRef))
-                                {
-                                    EA.Element superClassElement = _generatedElements[superClassRef];
 
+                                EA.Element? superClassElement = GetElementByFullNameAndVersion(superClassRef.FullName, superClassRef.Version!);
+                                if (superClassElement != null)
+                                {
                                     EA.Connector generalizationConnector = currentEaElement.AddConnector(superClassElement, "Generalization");
                                 }
                             }
@@ -485,15 +479,11 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
                             if (_elementsToConnect.ContainsKey(sourceProperty.TypeRef))
                             {
-                                if (_generatedElements.ContainsKey(sourceProperty.TypeRef))
-                                {
-                                    sourceEaElement = _generatedElements[sourceProperty.TypeRef];
-                                }
 
-                                if (_generatedElements.ContainsKey(targetProperty.TypeRef))
-                                {
-                                    targetEaElement = _generatedElements[targetProperty.TypeRef];
-                                }
+                                sourceEaElement = GetElementByFullNameAndVersion(sourceProperty.TypeRef.FullName, sourceProperty.TypeRef.Version!);
+
+                                targetEaElement = GetElementByFullNameAndVersion(targetProperty.TypeRef.FullName, targetProperty.TypeRef.Version!);
+
 
                                 if (sourceEaElement != null && targetEaElement != null)
                                 {
@@ -531,10 +521,11 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
             if (!IsPrimitive(property.TypeRef.FullName) && !isEnumeration)
             {
-                if (_generatedElements.ContainsKey(property.TypeRef))
-                {
-                    EA.Element oppositeEaElement = _generatedElements[property.TypeRef];
 
+                EA.Element? oppositeEaElement = GetElementByFullNameAndVersion(property.TypeRef.FullName, property.TypeRef.Version!);
+
+                if (oppositeEaElement != null)
+                {
                     EA.Connector aggregationConnector = oppositeEaElement.AddConnector(currentEaElement, "Aggregation");
                     aggregationConnector.ClientEnd.Navigable = "Unspecified";
                     aggregationConnector.ClientEnd.Cardinality = property.Multiplicity;
@@ -558,11 +549,10 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
             }
             else if (isEnumeration)
             {
+                EA.Element? attributeType = GetElementByFullNameAndVersion(property.TypeRef.FullName, property.TypeRef.Version!);
 
-                if (_generatedElements.ContainsKey(property.TypeRef))
+                if (attributeType != null)
                 {
-                    EA.Element attributeType = _generatedElements[property.TypeRef];
-
                     EA.Attribute attribute = currentEaElement.AddAttribute(property.Name, attributeType.Name);
 
                     attribute.ClassifierID = attributeType.ElementID;
@@ -571,6 +561,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                     attribute.Update();
                 }
             }
+
         }
 
         private void GenerateAnnotationsForPrimitiveTypes()
