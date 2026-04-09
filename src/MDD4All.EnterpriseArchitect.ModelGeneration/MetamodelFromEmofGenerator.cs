@@ -137,15 +137,26 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                         Version = packageableElement.Version
                     };
 
+                    
+
+
                     if (!_elementsToConnect.ContainsKey(typeReference))
                     {
                         _elementsToConnect.Add(typeReference, existingElement);
                     }
+
+
+                }
+
+                if (packageableElement is MOF.Extensions.Struct && existingElement != null && existingElement.Stereotype != "struct")
+                {
+                    existingElement.Stereotype = "struct";
+                    existingElement.Update();
                 }
 
                 if (updateElement)
                 {
-                    if (packageableElement is MOF.Class)
+                    if (packageableElement is MOF.Class || packageableElement is MOF.Extensions.Struct)
                     {
                         MOF.Class mofClass = (MOF.Class)packageableElement;
 
@@ -181,6 +192,12 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                         {
                             classElement.Abstract = "1";
                         }
+
+                        if(packageableElement is MOF.Extensions.Struct)
+                        {
+                            classElement.Stereotype = "struct";
+                        }
+
                         classElement.Update();
 
                         AddOrUpdatePrimitiveProperties(mofClass.OwnedAttributes, classElement);
@@ -283,9 +300,9 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                 }
                 else
                 {
-                    EA.Attribute litearlAttribute = enumerationElement.AddAttribute(literal.Name, "");
-                    litearlAttribute.Stereotype = "enum";
-                    litearlAttribute.Update();
+                    EA.Attribute literalAttribute = enumerationElement.AddAttribute(literal.Name, "");
+                    literalAttribute.Stereotype = "enum";
+                    literalAttribute.Update();
                 }
             }
 
@@ -519,7 +536,9 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
             bool isEnumeration = IsEnumeration(property.TypeRef.FullName);
 
-            if (!IsPrimitive(property.TypeRef.FullName) && !isEnumeration)
+            bool isStruct = IsStruct(property.TypeRef.FullName);
+
+            if (!IsPrimitive(property.TypeRef.FullName) && !isEnumeration && !isStruct)
             {
 
                 EA.Element? oppositeEaElement = GetElementByFullNameAndVersion(property.TypeRef.FullName, property.TypeRef.Version!);
@@ -547,7 +566,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                     GenerateAnnotaionsForComplexType(property, aggregationConnector);
                 }
             }
-            else if (isEnumeration)
+            else if (isEnumeration || isStruct)
             {
                 EA.Element? attributeType = GetElementByFullNameAndVersion(property.TypeRef.FullName, property.TypeRef.Version!);
 
@@ -561,6 +580,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                     attribute.Update();
                 }
             }
+            
 
         }
 
@@ -667,6 +687,20 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
             MOF.Base.PackageableElement? packageableElement = FindByFullName(fullName);
 
             if (packageableElement != null && packageableElement is MOF.Enumeration)
+            {
+                result = true;
+            }
+
+            return result;
+
+        }
+
+        private bool IsStruct(string fullName)
+        {
+            bool result = false;
+            MOF.Base.PackageableElement? packageableElement = FindByFullName(fullName);
+
+            if (packageableElement != null && packageableElement is MOF.Extensions.Struct)
             {
                 result = true;
             }
