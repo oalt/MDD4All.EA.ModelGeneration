@@ -3,6 +3,7 @@ using MDD4All.EnterpriseArchitect.Manipulations;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using MOF = MDD4All.EMOF.DataModels;
@@ -25,6 +26,11 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
         private List<AnnotationDescriptor> _unconnectedPrimitiveAnnotations = new List<AnnotationDescriptor>();
 
+        private Dictionary<string, int> _elementIdCache = new Dictionary<string, int>();
+
+        private Dictionary<string, int> _packageIdCache = new Dictionary<string, int>();
+
+        private int _cacheUsings = 0;
 
         public MetamodelFromEmofGenerator(EA.Repository repository,
                                           string pathToShema,
@@ -39,6 +45,8 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
         {
             _elementsToConnect = new Dictionary<MOF.Base.TypeReference, EA.Element>();
             _unconnectedPrimitiveAnnotations = new List<AnnotationDescriptor>();
+            _elementIdCache = new Dictionary<string, int>();
+            _packageIdCache = new Dictionary<string, int>();
 
             string emofJson = File.ReadAllText(_pathToSchema);
 
@@ -77,12 +85,16 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                     //_repository.GetProjectInterface().LayoutDiagram(metamodelDiagram.DiagramGUID, 0);
 
                     _targetPackage.Element.Update();
+
+                    
                 }
                 catch (Exception exception)
                 {
                     ;
                 }
             }
+
+            Debug.WriteLine("Cache usings: " + _cacheUsings);
         }
 
 
@@ -116,7 +128,9 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                     updateElement = true;
                 }
 
-                if (existingElement != null && existingElement.Version == "1.0.0.0")
+                if (existingElement != null 
+                    && !packageableElement.Namespace.StartsWith("System") 
+                    && !packageableElement.Namespace.StartsWith("Microsoft") /* && existingElement.Version == "1.0.0.0" */)
                 {
                     // update existing element
                     createNewElement = false;
@@ -137,7 +151,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                         Version = packageableElement.Version
                     };
 
-                    
+
 
 
                     if (!_elementsToConnect.ContainsKey(typeReference))
@@ -193,7 +207,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
                             classElement.Abstract = "1";
                         }
 
-                        if(packageableElement is MOF.Extensions.Struct)
+                        if (packageableElement is MOF.Extensions.Struct)
                         {
                             classElement.Stereotype = "struct";
                         }
@@ -387,11 +401,26 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
         {
             Dictionary<string, EA.Attribute> result = new Dictionary<string, EA.Attribute>();
 
+            List<EA.Attribute> attributesToDelete = new List<EA.Attribute>();
+
             for (short counter = 0; counter < element.Attributes.Count; counter++)
             {
                 EA.Attribute attribute = (EA.Attribute)element.Attributes.GetAt(counter);
-                result.Add(attribute.Name, attribute);
+                if (!result.ContainsKey(attribute.Name))
+                {
+                    result.Add(attribute.Name, attribute);
+                }
+                else
+                {
+                    attributesToDelete.Add(attribute);
+                }
             }
+
+            foreach(EA.Attribute attribute in attributesToDelete)
+            {
+                element.DeleteAttribute(attribute);
+            }
+
             return result;
         }
 
@@ -399,6 +428,7 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
         {
             foreach (MOF.Base.PackageableElement packageableElement in currentPackage.PackagedElements)
             {
+                
                 if (packageableElement is MOF.Class)
                 {
                     MOF.Class mofClass = (MOF.Class)packageableElement;
@@ -572,15 +602,18 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
 
                 if (attributeType != null)
                 {
-                    EA.Attribute attribute = currentEaElement.AddAttribute(property.Name, attributeType.Name);
+                    if (!IsPrimitive(property.TypeRef.FullName))
+                    {
+                        EA.Attribute attribute = currentEaElement.AddAttribute(property.Name, attributeType.Name);
 
-                    attribute.ClassifierID = attributeType.ElementID;
+                        attribute.ClassifierID = attributeType.ElementID;
 
-                    attribute.Stereotype = "property";
-                    attribute.Update();
+                        attribute.Stereotype = "property";
+                        attribute.Update();
+                    }
                 }
             }
-            
+
 
         }
 
@@ -661,19 +694,31 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
             }
         }
 
-        private HashSet<string> _primitiveTypes = new HashSet<string>
+        private Dictionary<string, string> _primitiveTypes = new Dictionary<string, string>
         {
-            "System.Int32",
-            "System.String",
-            "System.Char",
-            "System.Boolean"
+            { "string", "System.String" },
+            { "int", "System.Int32" },
+            { "bool", "System.Boolean" },
+            { "byte", "System.Byte" },
+            { "sbyte" , "System.SByte" },
+            { "char", "System.Char" },
+            { "decimal", "System.Decimal" },
+            { "double", "System.Double" },
+            { "float", "System.Single" },
+            { "uint", "System.UInt32" },
+            { "nint" , "System.IntPtr" },
+            { "nuint", "System.UIntPtr" },
+            { "long", "System.Int64" },
+            { "ulong", "System.UInt64" },
+            { "short", "System.Int16" },
+            { "ushort", "System.UInt16" }
         };
 
         private bool IsPrimitive(string fullName)
         {
             bool result = false;
 
-            if (_primitiveTypes.Contains(fullName))
+            if (_primitiveTypes.ContainsValue(fullName))
             {
                 result = true;
             }
@@ -749,85 +794,95 @@ namespace MDD4All.EnterpriseArchitect.ModelGeneration
         {
             string? result = null;
 
-            switch (fullName)
+            foreach (KeyValuePair<string, string> keyValuePair in _primitiveTypes)
             {
-                case "System.Boolean":
-                    result = "bool";
+                if ((keyValuePair.Value == fullName))
+                {
+                    result = keyValuePair.Key;
                     break;
-
-                case "System.Int32":
-                    result = "int";
-                    break;
-
-                case "System.String":
-                    result = "string";
-                    break;
-
-                case "System.Byte":
-                    result = "byte";
-                    break;
-
-                case "System.Double":
-                    result = "double";
-                    break;
-
-                case "System.Float":
-                    result = "float";
-                    break;
+                }
             }
 
             return result;
         }
-
-
 
         private EA.Package GetOrCreateNamespacePackage(string fullName)
         {
-            string[] namespaceTokens = GetNamespacePartsFromFullName(fullName);
+            EA.Package result;
 
-            EA.Package result = _targetPackage;
-            foreach (string token in namespaceTokens)
+            if (_packageIdCache.ContainsKey(fullName))
             {
-                EA.Package childPackage = result.GetChildPackageByName(token);
-
-                if (childPackage == null)
-                {
-                    childPackage = result.AddChildPackage(token);
-                }
-                result = childPackage;
+                result = _repository.GetPackageByID(_packageIdCache[fullName]);
             }
+            else
+            {
+                string[] namespaceTokens = GetNamespacePartsFromFullName(fullName);
 
+                result = _targetPackage;
+                foreach (string token in namespaceTokens)
+                {
+                    EA.Package childPackage = result.GetChildPackageByName(token);
+
+                    if (childPackage == null)
+                    {
+                        childPackage = result.AddChildPackage(token);
+                    }
+                    result = childPackage;
+                }
+
+                _packageIdCache.Add(fullName, result.PackageID);
+
+            }
 
             return result;
         }
+
+        
 
         private EA.Element? GetElementByFullNameAndVersion(string fullName, string version)
         {
             EA.Element? result = null;
 
-            string name = GetClassNameFromFullName(fullName);
+            string key = fullName + "@" + version;
 
-            EA.Package package = GetOrCreateNamespacePackage(fullName);
-
-            for (short counter = 0; counter < package.Elements.Count; counter++)
+            if (_elementIdCache.ContainsKey(key))
             {
-                EA.Element element = (EA.Element)package.Elements.GetAt(counter);
+                int elementId = _elementIdCache[key];
+                result = _repository.GetElementByID(elementId);
 
-                if (version != "")
+                _cacheUsings++;
+            }
+            else
+            {
+                string name = GetClassNameFromFullName(fullName);
+
+                EA.Package package = GetOrCreateNamespacePackage(fullName);
+
+                for (short counter = 0; counter < package.Elements.Count; counter++)
                 {
-                    if (element.Name == name && element.Version == version)
+                    EA.Element element = (EA.Element)package.Elements.GetAt(counter);
+
+                    if (version != "")
                     {
-                        result = element;
-                        break;
+                        if (element.Name == name && element.Version == version)
+                        {
+                            result = element;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        if (element.Name == name)
+                        {
+                            result = element;
+                            break;
+                        }
                     }
                 }
-                else
+
+                if (result != null)
                 {
-                    if (element.Name == name)
-                    {
-                        result = element;
-                        break;
-                    }
+                    _elementIdCache.Add(key, result.ElementID);
                 }
             }
 
